@@ -24,7 +24,7 @@ pipeline {
                 checkout([
                     $class: 'GitSCM',
                     branches: [[name: 'main']],
-                    userRemoteConfigs: [[url: 'https://github.com/mhmdnori/jenkins-cicd-pipeline.git']],
+                    userRemoteConfigs: [[url: 'https://github.com/mhmdnori/jenkins-cicd.git']],
                     extensions: [[$class: 'CleanBeforeCheckout']]
                 ])
             }
