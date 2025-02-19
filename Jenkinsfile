@@ -62,8 +62,6 @@ pipeline {
                                     --out ./reports/dependency-check
                                     --format JSON 
                                     --enableExperimental
-                                    --analyzer python
-                                    --analyzer node
                                     --failOnCVSS 7.0
                                     --data /var/lib/jenkins/dependency-check-data
                                 ''', 
