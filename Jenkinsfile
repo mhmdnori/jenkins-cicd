@@ -12,7 +12,6 @@ pipeline {
     }
 
     stages {
-
         stage('Clean Workspace') {
             steps {
                 cleanWs()
@@ -30,14 +29,22 @@ pipeline {
             }
         }
 
+        stage('Download Trivy Database') {
+            steps {
+                script {
+                    sh '''
+                        export TRIVY_DB_REPOSITORY="ghcr.io/aquasecurity/trivy-db"
+                        trivy image --download-db-only
+                    '''
+                }
+            }
+        }
+
         stage('Trivy FileSystem Scan') {
             steps {
                 script {
                     try {
-                        sh '''
-                            trivy fs --severity HIGH,CRITICAL,MEDIUM --format table -o trivy-fs-report.html .
-                        '''
-
+                        sh 'trivy fs --severity HIGH,CRITICAL,MEDIUM --format table -o trivy-fs-report.html .'
                         archiveArtifacts artifacts: 'trivy-fs-report.html', allowEmptyArchive: true
 
                         def reportContent = readFile('trivy-fs-report.html')
@@ -72,27 +79,26 @@ pipeline {
 
         stage('Publish Dependency-Check Results') {
             steps {
-                dependencyCheckPublisher pattern: '**/dependency-check-report.json', 
+                dependencyCheckPublisher pattern: '**/reports/dependency-check/dependency-check-report.json', 
                                         failedNewHigh: 1, 
                                         failedTotalCritical: 0, 
                                         stopBuild: true
             }
         }
 
-        stage('SonarQube Analysis and Archive') {
+        stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') {
+                withSonarQubeEnv('SonarScanner') {
                     withCredentials([string(credentialsId: 'SONARQUBE_TOKEN', variable: 'SONARQUBE_TOKEN')]) {
                         script {
                             echo "Running SonarQube Analysis..."
                             sh '''
                             set +x
-                            /opt/sonar-scanner/sonar-scanner-7.0.1.4817-linux-x64/bin/sonar-scanner \
-                              -Dsonar.projectKey=my-project \
-                              -Dsonar.sources=. \
-                              -Dsonar.host.url=$SONAR_HOST_URL \
-                              -Dsonar.login=$SONARQUBE_TOKEN \
-                              -Dsonar.analysis.outputFile=sonar-report.json
+                                sonar-scanner \
+                                  -Dsonar.projectKey=my-project \
+                                  -Dsonar.sources=. \
+                                  -Dsonar.host.url=$SONAR_HOST_URL \
+                                  -Dsonar.login=$SONARQUBE_TOKEN
                             '''
 
                             archiveArtifacts artifacts: 'sonar-report.json', fingerprint: true
@@ -107,7 +113,7 @@ pipeline {
                 script {
                     withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
                         sh "docker build -t testapp ."
-                        sh "docker tag testapp mohammad9195/testapp:latest "
+                        sh "docker tag testapp mohammad9195/testapp:latest"
                     }
                 }
             }
@@ -117,11 +123,9 @@ pipeline {
             steps {
                 script {
                     try {
-                        def imageName = 'testapp:latest'
+                        def imageName = 'mohammad9195/testapp:latest'
                         def reportJson = 'trivy-image-report.json'
                         def reportTxt = 'trivy-image-report.txt'
-
-                        sh "trivy image --download-db-only"
 
                         sh "trivy image --severity HIGH,CRITICAL,MEDIUM --format json -o ${reportJson} ${imageName}"
                         sh "trivy image --severity HIGH,CRITICAL --format table -o ${reportTxt} ${imageName}"
@@ -130,8 +134,8 @@ pipeline {
                         archiveArtifacts artifacts: 'trivy-image-report.txt', allowEmptyArchive: true
 
                         def trivyReport = readJSON file: reportJson
-                        def criticalCount = trivyReport.findResults { it.Severity == "CRITICAL" }.size()
-                        def highCount = trivyReport.findResults { it.Severity == "HIGH" }.size()
+                        def criticalCount = trivyReport.Vulnerabilities.findAll { it.Severity == "CRITICAL" }.size()
+                        def highCount = trivyReport.Vulnerabilities.findAll { it.Severity == "HIGH" }.size()
 
                         if (criticalCount > 0 || highCount > 5) {
                             error "Build failed due to security vulnerabilities: CRITICAL=${criticalCount}, HIGH=${highCount}"
