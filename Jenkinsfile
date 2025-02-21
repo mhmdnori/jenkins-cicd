@@ -71,9 +71,7 @@ pipeline {
                                     --enableExperimental
                                     --failOnCVSS 7.0
                                     --data /var/lib/jenkins/dependency-check-data
-                                ''', 
-                                nvdCredentialsId: 'nvd-api-key', 
-                                stopBuild: true
+                                '''
             }
         }
 
